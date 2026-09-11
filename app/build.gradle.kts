@@ -31,6 +31,12 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
+    getByName("debug") {
+      enableV1Signing = true
+      enableV2Signing = true
+      enableV3Signing = true
+      enableV4Signing = true
+    }
   }
 
   buildTypes {
@@ -39,6 +45,9 @@ android {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
+    }
+    debug {
+      signingConfig = signingConfigs.getByName("debug")
     }
   }
   compileOptions {
