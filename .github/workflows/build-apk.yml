@@ -36,11 +36,6 @@ jobs:
             fi
           fi
           
-          # Restore debug.keystore if base64 exists
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-          fi
-          
           # Make gradlew executable
           chmod +x ./gradlew
 
