@@ -24,12 +24,35 @@ android {
   }
 
   signingConfigs {
+    val releaseKeystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+    val releaseStoreFile = file(releaseKeystorePath)
+    if (!releaseStoreFile.exists()) {
+      try {
+        val keytoolCmd = arrayOf(
+          "keytool", "-genkeypair", "-v",
+          "-keystore", releaseStoreFile.absolutePath,
+          "-alias", System.getenv("KEY_ALIAS") ?: "upload",
+          "-keyalg", "RSA",
+          "-keysize", "2048",
+          "-validity", "10000",
+          "-storepass", System.getenv("STORE_PASSWORD") ?: "android",
+          "-keypass", System.getenv("KEY_PASSWORD") ?: "android",
+          "-dname", "CN=Micro Aman, OU=Mobile, O=MicroAman, L=Delhi, ST=Delhi, C=IN"
+        )
+        val process = ProcessBuilder(*keytoolCmd).start()
+        process.waitFor()
+      } catch (_: Exception) {}
+    }
+
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      storeFile = releaseStoreFile
+      storePassword = System.getenv("STORE_PASSWORD") ?: "android"
+      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+      keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+      enableV1Signing = true
+      enableV2Signing = true
+      enableV3Signing = true
+      enableV4Signing = true
     }
     getByName("debug") {
       enableV1Signing = true
@@ -41,12 +64,14 @@ android {
 
   buildTypes {
     release {
+      isDebuggable = false
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
+      isDebuggable = true
       signingConfig = signingConfigs.getByName("debug")
     }
   }

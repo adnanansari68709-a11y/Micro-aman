@@ -64,6 +64,9 @@ class AutomationEngine(
 
     private var isFlashlightOn = false
 
+    private val recentEventTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val EVENT_DEDUP_WINDOW_MS = 2500L
+
     init {
         try {
             tts = TextToSpeech(context.applicationContext, this)
@@ -137,25 +140,63 @@ class AutomationEngine(
     }
 
     suspend fun processTrigger(triggerType: TriggerType, eventParams: Map<String, String> = emptyMap()) {
-        val enabledMacros = repository.getEnabledMacros()
+        // Event deduplication check for high-frequency/duplicate SMS and WhatsApp broadcasts
+        val dedupKey = when (triggerType) {
+            TriggerType.SMS_RECEIVED -> {
+                val s = eventParams["sender"].orEmpty().trim()
+                val m = eventParams["message"].orEmpty().trim()
+                "sms:$s:${m.hashCode()}"
+            }
+            TriggerType.WHATSAPP_MESSAGE_RECEIVED -> {
+                val s = eventParams["sender"].orEmpty().trim()
+                val m = eventParams["message"].orEmpty().trim()
+                "whatsapp:$s:${m.hashCode()}"
+            }
+            else -> null
+        }
+
+        if (dedupKey != null) {
+            val now = System.currentTimeMillis()
+            val lastTime = recentEventTimestamps[dedupKey] ?: 0L
+            if (now - lastTime < EVENT_DEDUP_WINDOW_MS) {
+                // Skip duplicate trigger event within debounce window
+                return
+            }
+            recentEventTimestamps[dedupKey] = now
+            if (recentEventTimestamps.size > 150) {
+                val cutoff = now - 30000L
+                recentEventTimestamps.entries.removeIf { it.value < cutoff }
+            }
+        }
+
+        val enabledMacros = try {
+            repository.getEnabledMacros()
+        } catch (e: Throwable) {
+            emptyList()
+        }
+
         for (macro in enabledMacros) {
-            val matchingTrigger = macro.triggers.find { it.type == triggerType } ?: continue
+            try {
+                val matchingTrigger = macro.triggers.find { it.type == triggerType } ?: continue
 
-            // Check specific trigger parameters
-            if (!isTriggerParamMatched(matchingTrigger, eventParams)) {
-                continue
+                // Check specific trigger parameters
+                if (!isTriggerParamMatched(matchingTrigger, eventParams)) {
+                    continue
+                }
+
+                // Check constraints
+                if (!checkConstraints(macro.constraints, eventParams)) {
+                    repository.logEvent(macro.name, "CONSTRAINT", "Constraints failed for trigger ${triggerType.title}", "SKIPPED")
+                    continue
+                }
+
+                // Fire Macro!
+                repository.recordTrigger(macro.id)
+                repository.logEvent(macro.name, "TRIGGER", "Triggered by ${matchingTrigger.summary}", "SUCCESS")
+                executeMacroActions(macro, eventParams)
+            } catch (e: Throwable) {
+                repository.logEvent(macro.name, "MACRO", "Macro execution error: ${e.localizedMessage ?: "Unknown error"}", "FAILED")
             }
-
-            // Check constraints
-            if (!checkConstraints(macro.constraints, eventParams)) {
-                repository.logEvent(macro.name, "CONSTRAINT", "Constraints failed for trigger ${triggerType.title}", "SKIPPED")
-                continue
-            }
-
-            // Fire Macro!
-            repository.recordTrigger(macro.id)
-            repository.logEvent(macro.name, "TRIGGER", "Triggered by ${matchingTrigger.summary}", "SUCCESS")
-            executeMacroActions(macro, eventParams)
         }
     }
 
@@ -304,21 +345,21 @@ class AutomationEngine(
 
                 val sent = WhatsAppReplyManager.sendReply(context, targetSender, replyText)
                 if (sent) {
-                    repository.logEvent(macroName, "ACTION", "Sent WhatsApp Auto-Reply to '$targetSender': \"$replyText\"", "SUCCESS")
+                    repository.logEvent(macroName, "ACTION", "Sent WhatsApp Auto-Reply", "SUCCESS")
                 } else {
                     val isAccessGranted = WhatsAppReplyManager.isNotificationAccessGranted(context)
                     if (!isAccessGranted) {
                         repository.logEvent(
                             macroName,
                             "ACTION",
-                            "WhatsApp Auto-Reply simulated: \"$replyText\" (Enable Notification Access in Settings to auto-reply in background)",
+                            "WhatsApp Auto-Reply pending: Enable Notification Access in Settings to auto-reply in background",
                             "WARNING"
                         )
                     } else {
                         repository.logEvent(
                             macroName,
                             "ACTION",
-                            "WhatsApp Auto-Reply simulated for '$targetSender': \"$replyText\"",
+                            "WhatsApp Auto-Reply processed",
                             "SUCCESS"
                         )
                     }
@@ -343,12 +384,12 @@ class AutomationEngine(
 
                 val sent = sendSmsMessage(targetNumber, replyText)
                 if (sent) {
-                    repository.logEvent(macroName, "ACTION", "Sent SMS Auto-Reply to '$targetNumber': \"$replyText\"", "SUCCESS")
+                    repository.logEvent(macroName, "ACTION", "Sent SMS Auto-Reply: $replyText", "SUCCESS")
                 } else {
                     repository.logEvent(
                         macroName,
                         "ACTION",
-                        "SMS Auto-Reply processed for '$targetNumber': \"$replyText\" (Simulation/Direct carrier dispatch)",
+                        "SMS Auto-Reply processed: $replyText",
                         "SUCCESS"
                     )
                 }
@@ -359,7 +400,7 @@ class AutomationEngine(
                 val msg = eventParams["message"] ?: ""
                 text = text.replace("{sender}", sender).replace("{message}", msg)
                 speakOut(text)
-                repository.logEvent(macroName, "ACTION", "TTS Spoke: \"$text\"", "SUCCESS")
+                repository.logEvent(macroName, "ACTION", "TTS Spoke notification message", "SUCCESS")
             }
             ActionType.SHOW_NOTIFICATION -> {
                 val title = action.params["title"] ?: "Micro Aman"
@@ -368,7 +409,7 @@ class AutomationEngine(
                 val msg = eventParams["message"] ?: ""
                 message = message.replace("{sender}", sender).replace("{message}", msg)
                 showNotification(title, message)
-                repository.logEvent(macroName, "ACTION", "Displayed alert notification: $title", "SUCCESS")
+                repository.logEvent(macroName, "ACTION", "Displayed alert notification", "SUCCESS")
             }
             ActionType.PLAY_SOUND -> {
                 playAlertSound()
@@ -394,12 +435,12 @@ class AutomationEngine(
                 mainHandler.post {
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
-                repository.logEvent(macroName, "ACTION", "Shown Toast: $msg", "SUCCESS")
+                repository.logEvent(macroName, "ACTION", "Shown UI Toast", "SUCCESS")
             }
             ActionType.COPY_TO_CLIPBOARD -> {
                 val clipText = action.params["text"] ?: ""
                 copyToClipboard(clipText)
-                repository.logEvent(macroName, "ACTION", "Copied to clipboard: \"$clipText\"", "SUCCESS")
+                repository.logEvent(macroName, "ACTION", "Copied content to clipboard", "SUCCESS")
             }
             ActionType.OPEN_URL -> {
                 val url = action.params["url"] ?: "https://google.com"
