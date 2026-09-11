@@ -1,0 +1,7 @@
+{
+  "name": "Micro Aman",
+  "description": "Powerful MacroDroid-style device automation app. Create triggers, actions, and constraints to automate your phone completely free.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

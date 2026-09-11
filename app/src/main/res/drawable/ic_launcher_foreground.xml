@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Macro Automator Gear & Hex Ring -->
+    <path
+        android:pathData="M54,23 L62,26 L66,33 L74,38 L77,47 L83,54 L77,61 L74,70 L66,75 L62,82 L54,85 L46,82 L42,75 L34,70 L31,61 L25,54 L31,47 L34,38 L42,33 L46,26 Z"
+        android:strokeWidth="3.5"
+        android:strokeColor="#00E5FF"
+        android:fillColor="#10172A" />
+
+    <!-- Inner Automation Circuit Ring -->
+    <path
+        android:pathData="M54,30 A24,24 0 1,1 53.9,30"
+        android:strokeWidth="2.5"
+        android:strokeColor="#38BDF8"
+        android:fillColor="#00000000" />
+
+    <!-- Lightning Bolt Automation Trigger / Action -->
+    <path
+        android:pathData="M56,33 L44,52 L53,52 L50,71 L64,49 L55,49 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:angle="45"
+                android:endColor="#FF9100"
+                android:startColor="#FF3D00"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Glowing Tech Circuit Nodes -->
+    <path
+        android:pathData="M54,23 A2.5,2.5 0 1,1 53.9,23"
+        android:fillColor="#00E5FF" />
+    <path
+        android:pathData="M83,54 A2.5,2.5 0 1,1 82.9,54"
+        android:fillColor="#00E5FF" />
+    <path
+        android:pathData="M54,85 A2.5,2.5 0 1,1 53.9,85"
+        android:fillColor="#00E5FF" />
+    <path
+        android:pathData="M25,54 A2.5,2.5 0 1,1 24.9,54"
+        android:fillColor="#00E5FF" />
+</vector>
+
