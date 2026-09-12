@@ -1,12 +1,14 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
-
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  alias(libs.plugins.google.services)
+}
+
+// Apply Google Services plugin only if real google-services.json is present
+if (file("google-services.json").exists()) {
+  apply(plugin = "com.google.gms.google-services")
 }
 
 android {
@@ -24,41 +26,29 @@ android {
   }
 
   signingConfigs {
-    val releaseKeystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-    val releaseStoreFile = file(releaseKeystorePath)
-    if (!releaseStoreFile.exists()) {
-      try {
-        val keytoolCmd = arrayOf(
-          "keytool", "-genkeypair", "-v",
-          "-keystore", releaseStoreFile.absolutePath,
-          "-alias", System.getenv("KEY_ALIAS") ?: "upload",
-          "-keyalg", "RSA",
-          "-keysize", "2048",
-          "-validity", "10000",
-          "-storepass", System.getenv("STORE_PASSWORD") ?: "android",
-          "-keypass", System.getenv("KEY_PASSWORD") ?: "android",
-          "-dname", "CN=Micro Aman, OU=Mobile, O=MicroAman, L=Delhi, ST=Delhi, C=IN"
-        )
-        val process = ProcessBuilder(*keytoolCmd).start()
-        process.waitFor()
-      } catch (_: Exception) {}
-    }
+    // Normal debug signing is provided by default by Android Gradle Plugin
+    val keystorePath = System.getenv("KEYSTORE_PATH")
+      ?: (project.findProperty("KEYSTORE_PATH") as? String)
+    val storePass = System.getenv("STORE_PASSWORD")
+      ?: (project.findProperty("STORE_PASSWORD") as? String)
+    val keyAliasVal = System.getenv("KEY_ALIAS")
+      ?: (project.findProperty("KEY_ALIAS") as? String)
+    val keyPass = System.getenv("KEY_PASSWORD")
+      ?: (project.findProperty("KEY_PASSWORD") as? String)
 
-    create("release") {
-      storeFile = releaseStoreFile
-      storePassword = System.getenv("STORE_PASSWORD") ?: "android"
-      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-      keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
-      enableV1Signing = true
-      enableV2Signing = true
-      enableV3Signing = true
-      enableV4Signing = true
-    }
-    getByName("debug") {
-      enableV1Signing = true
-      enableV2Signing = true
-      enableV3Signing = true
-      enableV4Signing = true
+    val releaseKeystoreFile = if (!keystorePath.isNullOrBlank()) file(keystorePath) else null
+
+    if (releaseKeystoreFile != null && releaseKeystoreFile.exists() && !storePass.isNullOrBlank() && !keyAliasVal.isNullOrBlank()) {
+      create("release") {
+        storeFile = releaseKeystoreFile
+        storePassword = storePass
+        keyAlias = keyAliasVal
+        keyPassword = keyPass ?: storePass
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
+        enableV4Signing = true
+      }
     }
   }
 
@@ -68,7 +58,9 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      signingConfigs.findByName("release")?.let { releaseSigning ->
+        signingConfig = releaseSigning
+      }
     }
     debug {
       isDebuggable = true
@@ -98,13 +90,11 @@ secrets {
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
-
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
+  // implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)
@@ -127,7 +117,7 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
+  // implementation(libs.firebase.ai)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
 
@@ -137,8 +127,8 @@ dependencies {
   // implementation(libs.androidx.credentials)
   // implementation(libs.androidx.credentials.play.services)
   // implementation(libs.googleid)
-  implementation(libs.firebase.appcheck.recaptcha)
-  implementation(libs.firebase.appcheck.debug)
+  // implementation(libs.firebase.appcheck.recaptcha)
+  // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
